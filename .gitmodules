@@ -1,0 +1,3 @@
+[submodule "Core/Lib/efs-canard"]
+	path = Core/Lib/efs-canard
+	url = https://github.com/UWARG/efs-canard.git
