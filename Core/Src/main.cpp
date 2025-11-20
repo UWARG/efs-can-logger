@@ -99,8 +99,9 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	  DroneCan::update();
     /* USER CODE END WHILE */
-
+	  HAL_Delay(20);
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */

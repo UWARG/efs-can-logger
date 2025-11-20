@@ -33,6 +33,7 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
     printf("Receive error %d\n", rx_res);
   } else if (rx_res > 0) {
     // Success - process the frame
+	printf("ISR frame received");
     canardHandleRxFrame(&canard, &rx_frame, timestamp);
   }
 }
@@ -40,6 +41,7 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
 void DroneCan::init(CAN_HandleTypeDef *hcan1) {
   canardInit(&canard, canard_buffer, BUFFER_SIZE, onTransferReceived,
              shouldAcceptTransfer, nullptr);
+  canardSetLocalNodeID(&canard, NODE_ID);
   // setup ISR for CAN receive
   HAL_CAN_ActivateNotification(hcan1, CAN_IT_RX_FIFO0_MSG_PENDING);
   hcan = hcan1;
@@ -153,6 +155,13 @@ void processCanardTxQueue() {
 }
 
 void writeFrameToLog(const CanardCANFrame * const frame) {
+	uint32_t timestamp_millis = HAL_GetTick();
+	uint32_t timestamp_s = timestamp_millis / 1000.0f;
+	uint64_t frame_data = 0;
+	for (uint64_t i = 0; i < frame->data_len; i++) {
+		frame_data |= frame->data[i] << (8 * i);
+	}
+	printf("(%ld.%ld) can%d %lx#%llx", timestamp_s, timestamp_millis, frame->iface_id, frame->id, frame_data);
 
 }
 
