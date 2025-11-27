@@ -44,6 +44,7 @@
 CAN_HandleTypeDef hcan1;
 
 /* USER CODE BEGIN PV */
+static constexpr uint8_t NODE_ID = 42;
 
 /* USER CODE END PV */
 
@@ -84,7 +85,6 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-  DroneCan::init(&hcan1);
 
   /* USER CODE END SysInit */
 
@@ -92,6 +92,7 @@ int main(void)
   MX_GPIO_Init();
   MX_CAN1_Init();
   /* USER CODE BEGIN 2 */
+  DroneCan::init(&hcan1, NODE_ID);
 
   /* USER CODE END 2 */
 
@@ -101,8 +102,9 @@ int main(void)
   {
 	  DroneCan::update();
     /* USER CODE END WHILE */
-	  HAL_Delay(20);
+
     /* USER CODE BEGIN 3 */
+	  HAL_Delay(20);
   }
   /* USER CODE END 3 */
 }
@@ -167,10 +169,10 @@ static void MX_CAN1_Init(void)
 
   /* USER CODE END CAN1_Init 1 */
   hcan1.Instance = CAN1;
-  hcan1.Init.Prescaler = 16;
+  hcan1.Init.Prescaler = 1;
   hcan1.Init.Mode = CAN_MODE_NORMAL;
-  hcan1.Init.SyncJumpWidth = CAN_SJW_1TQ;
-  hcan1.Init.TimeSeg1 = CAN_BS1_1TQ;
+  hcan1.Init.SyncJumpWidth = CAN_SJW_2TQ;
+  hcan1.Init.TimeSeg1 = CAN_BS1_6TQ;
   hcan1.Init.TimeSeg2 = CAN_BS2_1TQ;
   hcan1.Init.TimeTriggeredMode = DISABLE;
   hcan1.Init.AutoBusOff = DISABLE;

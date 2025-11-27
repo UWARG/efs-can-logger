@@ -10,7 +10,6 @@
 static CanardInstance canard;
 static constexpr size_t BUFFER_SIZE = 1024;
 static uint8_t canard_buffer[BUFFER_SIZE];
-static constexpr uint8_t NODE_ID = 42;
 static constexpr char const *NODE_NAME = "can-logger";
 static uavcan_protocol_NodeStatus node_status;
 static CAN_HandleTypeDef *hcan = nullptr;
@@ -22,6 +21,7 @@ bool shouldAcceptTransfer(const CanardInstance *ins,
                           CanardTransferType transfer_type,
                           uint8_t source_node_id);
 // The actual ISR, modify this to your needs
+/*
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
   // Receiving
   CanardCANFrame rx_frame;
@@ -37,14 +37,30 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
     canardHandleRxFrame(&canard, &rx_frame, timestamp);
   }
 }
+*/
 
-void DroneCan::init(CAN_HandleTypeDef *hcan1) {
-  canardInit(&canard, canard_buffer, BUFFER_SIZE, onTransferReceived,
+int DroneCan::init(CAN_HandleTypeDef *hcan1, const uint8_t node_id) {
+	// configure CAN filters to receive everything
+	CAN_FilterTypeDef sFilterConfig;
+	sFilterConfig.FilterBank = 0;
+	sFilterConfig.FilterMode = CAN_FILTERMODE_IDMASK;
+	sFilterConfig.FilterScale = CAN_FILTERSCALE_32BIT;
+	sFilterConfig.FilterIdHigh = 0x0000;
+	sFilterConfig.FilterIdLow = 0x0000;
+	sFilterConfig.FilterMaskIdHigh = 0x0000;
+	sFilterConfig.FilterMaskIdLow = 0x0000;
+	sFilterConfig.FilterFIFOAssignment = CAN_RX_FIFO0;
+	sFilterConfig.FilterActivation = ENABLE;
+	sFilterConfig.SlaveStartFilterBank = 14;
+	if (HAL_CAN_ConfigFilter(hcan1, &sFilterConfig) != HAL_OK) return -1;
+	if (HAL_CAN_Start(hcan1) != HAL_OK) return -1;
+	canardInit(&canard, canard_buffer, BUFFER_SIZE, onTransferReceived,
              shouldAcceptTransfer, nullptr);
-  canardSetLocalNodeID(&canard, NODE_ID);
-  // setup ISR for CAN receive
-  HAL_CAN_ActivateNotification(hcan1, CAN_IT_RX_FIFO0_MSG_PENDING);
-  hcan = hcan1;
+	canardSetLocalNodeID(&canard, node_id);
+	// setup ISR for CAN receive
+	// if (HAL_CAN_ActivateNotification(hcan1, CAN_IT_RX_FIFO0_MSG_PENDING) != HAL_OK) return -1;
+	hcan = hcan1;
+	return 0;
 }
 
 void handleGetNodeInfo(CanardRxTransfer *transfer) {
@@ -159,7 +175,7 @@ void writeFrameToLog(const CanardCANFrame * const frame) {
 	uint32_t timestamp_s = timestamp_millis / 1000.0f;
 	uint64_t frame_data = 0;
 	for (uint64_t i = 0; i < frame->data_len; i++) {
-		frame_data |= frame->data[i] << (8 * i);
+		frame_data |= static_cast<uint64_t>(frame->data[i]) << (8 * (7 - i));
 	}
 	printf("(%ld.%ld) can%d %lx#%llx", timestamp_s, timestamp_millis, frame->iface_id, frame->id, frame_data);
 

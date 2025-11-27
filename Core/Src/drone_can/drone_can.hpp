@@ -4,6 +4,7 @@
 
 
 namespace DroneCan {
-  void init(CAN_HandleTypeDef *hcan);
+	// return 0 for OK, negative for error.
+  int init(CAN_HandleTypeDef *hcan, const uint8_t node_id);
   void update();
 }
