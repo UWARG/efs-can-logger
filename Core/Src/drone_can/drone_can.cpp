@@ -2,6 +2,7 @@
 #include "canard_stm32_driver.h"
 #include "dronecan_msgs.h"
 #include "stm32l4xx_hal.h"
+#include "../debug/debug.hpp"
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -158,13 +159,13 @@ void processCanardTxQueue() {
     const int16_t tx_res = canardSTM32Transmit(hcan, tx_frame);
 
     if (tx_res < 0) {
-      printf("Transmit error %d\n", tx_res);
+      printf("Transmit error %d.\r\n", tx_res);
       canardPopTxQueue(&canard);
     } else if (tx_res > 0) {
-      printf("Successfully transmitted message\n");
+      printf("Successfully transmitted message.\r\n");
       canardPopTxQueue(&canard);
     } else {
-      printf("Timeout! Trying again later.\n");
+      printf("Timeout! Trying again later.\r\n");
       break;
     }
   }
@@ -175,9 +176,9 @@ void writeFrameToLog(const CanardCANFrame * const frame) {
 	uint32_t timestamp_s = timestamp_millis / 1000.0f;
 	uint64_t frame_data = 0;
 	for (uint64_t i = 0; i < frame->data_len; i++) {
-		frame_data |= static_cast<uint64_t>(frame->data[i]) << (8 * (7 - i));
+		frame_data |= static_cast<uint64_t>(frame->data[i]) << (8 * (frame->data_len - 1 - i));
 	}
-	printf("(%ld.%ld) can%d %lx#%llx", timestamp_s, timestamp_millis, frame->iface_id, frame->id, frame_data);
+	printf("(%ld.%ld) can%d %lx#%llx\r\n", timestamp_s, timestamp_millis, frame->iface_id, frame->id, frame_data);
 
 }
 
@@ -188,12 +189,12 @@ void receiveSingleFrame() {
   const uint64_t timestamp = HAL_GetTick() * 1000ULL;
   const int16_t rx_res = canardSTM32Recieve(hcan, CAN_RX_FIFO0, &rx_frame);
   if (rx_res < 0) {
-    printf("Receive error %d'\n", rx_res);
+    printf("Receive error %d.\r\n", rx_res);
   } else if (rx_res > 0) {
 	  writeFrameToLog(&rx_frame);
 	  canardHandleRxFrame(&canard, &rx_frame, timestamp);
   } else {
-	  printf("Receive error of hcan!\n");
+	  printf("No frames available or receive error of hcan!\r\n");
   }
 }
 

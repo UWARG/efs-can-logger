@@ -22,6 +22,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "drone_can/drone_can.hpp"
+#include "debug/debug.hpp"
+#include <stdio.h>
 
 /* USER CODE END Includes */
 
