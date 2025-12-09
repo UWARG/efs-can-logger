@@ -40,9 +40,10 @@ int16_t DroneCan::init(CAN_HandleTypeDef *hcan1, const uint8_t node_id) {
              shouldAcceptTransfer, nullptr);
 	canardSetLocalNodeID(&canard, node_id);
 	// setup ISR for CAN receive
-	// if (HAL_CAN_ActivateNotification(hcan1, CAN_IT_RX_FIFO0_MSG_PENDING) != HAL_OK) return -1;
+	if (HAL_CAN_ActivateNotification(hcan1, CAN_IT_RX_FIFO0_MSG_PENDING) != HAL_OK) return -1;
 	return 0;
 }
+
 
 void getUniqueID(uint8_t id[16]){
 	uint32_t unique_id[4];
@@ -189,9 +190,13 @@ int16_t receiveSingleFrame() {
   return rx_res;
 }
 
+// ISR for CAN frame receive
+void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
+	receiveSingleFrame();
+}
+
 void DroneCan::update() {
   processCanardTxQueue();
-  receiveSingleFrame();
   static Timestamp last_status = Timestamp::now();
   if (Timestamp::now() - last_status >= Duration::from_s(1)) {
 	  last_status = last_status + Duration::from_s(1);
