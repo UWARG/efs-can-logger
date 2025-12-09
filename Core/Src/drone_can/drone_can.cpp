@@ -8,13 +8,13 @@
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
+#include <inttypes.h>
 
 static CanardInstance canard;
 static constexpr size_t BUFFER_SIZE = 1024;
 static uint8_t canard_buffer[BUFFER_SIZE];
 static constexpr char const *NODE_NAME = "can-logger";
 static uavcan_protocol_NodeStatus node_status;
-static CAN_HandleTypeDef *hcan = nullptr;
 
 void onTransferReceived(CanardInstance *ins, CanardRxTransfer *transfer);
 bool shouldAcceptTransfer(const CanardInstance *ins,
@@ -24,7 +24,7 @@ bool shouldAcceptTransfer(const CanardInstance *ins,
                           uint8_t source_node_id);
 
 
-int DroneCan::init(CAN_HandleTypeDef *hcan1, const uint8_t node_id) {
+int16_t DroneCan::init(CAN_HandleTypeDef *hcan1, const uint8_t node_id) {
 	CanardSTM32CANTimings timings;
 	if (!canardSTM32ComputeCANTimings(HAL_RCC_GetPCLK1Freq(), 500000, &timings)) {
 		timings.bit_rate_prescaler = 1;
@@ -33,13 +33,14 @@ int DroneCan::init(CAN_HandleTypeDef *hcan1, const uint8_t node_id) {
 		timings.max_resynchronization_jump_width = 1;
 	}
 
-	canardSTM32Init(&timings, CanardSTM32IfaceModeNormal);
+	if (int16_t res = canardSTM32Init(&timings, CanardSTM32IfaceModeNormal)) {
+		return res;
+	}
 	canardInit(&canard, canard_buffer, BUFFER_SIZE, onTransferReceived,
              shouldAcceptTransfer, nullptr);
 	canardSetLocalNodeID(&canard, node_id);
 	// setup ISR for CAN receive
 	// if (HAL_CAN_ActivateNotification(hcan1, CAN_IT_RX_FIFO0_MSG_PENDING) != HAL_OK) return -1;
-	hcan = hcan1;
 	return 0;
 }
 
@@ -161,14 +162,23 @@ void writeFrameToLog(const CanardCANFrame * const frame) {
 	for (uint64_t i = 0; i < frame->data_len; i++) {
 		frame_data |= static_cast<uint64_t>(frame->data[i]) << (8 * (frame->data_len - 1 - i));
 	}
-	printf("(%ld.%ld) can%d %lx#%llx\r\n", timestamp_s, timestamp_millis, frame->iface_id, frame->id, frame_data);
+	// printf with uint64_t is broken on stm
+	uint32_t frame_data_h = frame_data >> 32;
+	uint32_t frame_data_l = frame_data;
+	if (frame_data_h) {
+		printf("(%lu.%lu) can%u %lx#%lx%08lx\r\n",
+				timestamp_s, timestamp_millis, frame->iface_id, frame->id, frame_data_h, frame_data_l);
+	} else {
+		printf("(%lu.%lu) can%u %lx#%lx\r\n",
+				timestamp_s, timestamp_millis, frame->iface_id, frame->id, frame_data_l);
+	}
 }
 
 int16_t receiveSingleFrame() {
   CanardCANFrame rx_frame;
   const int16_t rx_res = canardSTM32Receive(&rx_frame);
   if (rx_res == 0) {
-	  printf("No frame in buffer");
+	  printf("No frame in buffer\r\n");
   } else if (rx_res == 1) {
 	  writeFrameToLog(&rx_frame);
 	  uint64_t timestamp = HAL_GetTick() * 1000ULL;
