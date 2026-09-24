@@ -19,6 +19,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "fatfs.h"
+#include "blackbox_logger.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -57,7 +58,7 @@ static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_SPI2_Init(void);
 /* USER CODE BEGIN PFP */
-static void SD_MeasureStallTime(void);
+// static void SD_MeasureStallTime(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -100,22 +101,26 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
 // Viewable File Test
-  FATFS fs;
-  FIL file;
-  FRESULT res;
-  UINT bytes_written;
+  // FATFS fs;
+  // FIL file;
+  // FRESULT res;
+  // UINT bytes_written;
 
-  res = f_mount(&fs, "", 1);
+  // res = f_mount(&fs, "", 1);
 
-  if (res == FR_OK) {
-    res = f_open(&file, "test.txt", FA_CREATE_ALWAYS | FA_WRITE);
-    if (res == FR_OK) {
-      char msg[] = "Hello from STM32 FatFS write test!\r\n";
+  // if (res == FR_OK) {
+  //   res = f_open(&file, "test.txt", FA_CREATE_ALWAYS | FA_WRITE);
+  //   if (res == FR_OK) {
+  //     char msg[] = "Hello from STM32 FatFS write test!\r\n";
 
-      res = f_write(&file, msg, strlen(msg), &bytes_written);
+  //     res = f_write(&file, msg, strlen(msg), &bytes_written);
 
-      f_close(&file);
-    }
+  //     f_close(&file);
+  //   }
+  // }
+
+  if (!BlackboxLogger_Init("blackbox.bin")) {
+    Error_Handler();
   }
   /* USER CODE END 2 */
 
@@ -123,8 +128,8 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    BlackboxLogger_Service();
     /* USER CODE END WHILE */
-
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
