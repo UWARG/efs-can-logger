@@ -20,6 +20,8 @@
 #include "main.h"
 #include "fatfs.h"
 #include "blackbox_logger.h"
+#include "stm32l4xx_hal.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -126,9 +128,21 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  uint32_t last_flush = HAL_GetTick();
+
   while (1)
   {
     BlackboxLogger_Service();
+    uint32_t now = HAL_GetTick();
+    if ((uint32_t)(now - last_flush) >= 1000U){
+      if (BlackboxLogger_Flush()) {
+        last_flush = HAL_GetTick();
+      }
+    }
+
+    if (BlackboxLogger_HasStorageError()) {
+      Error_Handler();
+    }
     /* USER CODE END WHILE */
     /* USER CODE BEGIN 3 */
   }

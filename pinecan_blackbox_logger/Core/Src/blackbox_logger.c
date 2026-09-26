@@ -48,6 +48,12 @@ bool BlackboxLogger_PushFromISR(const void *record, size_t size) {
     uint32_t primask = __get_PRIMASK();
     __disable_irq();
 
+    if (storage_error) {
+        dropped_records++;
+        __set_PRIMASK(primask);
+        return false;
+    }
+
     LogBuffer *buffer = &buffers[active_index];
 
     if (buffer->used + size > LOG_BUFFER_SIZE) {
@@ -80,7 +86,7 @@ void BlackboxLogger_Service(void) {
     uint32_t primask = __get_PRIMASK();
     __disable_irq();
 
-    if (ready_index >= 0 && !writer_busy) {
+    if (!storage_error && ready_index >= 0 && !writer_busy) {
         claimed_index = ready_index;
         writer_busy = true;
     }
@@ -152,9 +158,18 @@ bool BlackboxLogger_Flush(void) {
         return false;
     }
 
-    return f_sync(&log_file) == FR_OK;
+    if (f_sync(&log_file) != FR_OK) {
+        storage_error = true;
+        return false;
+    }
+
+    return true;
 }
 
 uint32_t BlackboxLogger_GetDroppedRecordCount(void) {
     return dropped_records;
+}
+
+bool BlackboxLogger_HasStorageError(void) {
+    return storage_error;
 }

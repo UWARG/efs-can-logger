@@ -22,6 +22,8 @@ extern SPI_HandleTypeDef hspi2;
 #define SD_TOKEN_START 0xFE // Start token before reading or writing
 #define SD_WRITE_ACCEPTED 0x05 // Write has been accepted
 
+#define SD_SPI_TRANSFER_TIMEOUT_MS 10U
+
 static uint8_t sd_initialized = 0; // Track init status
 static uint8_t sd_type_v2 = 0; // Track SD V2 status
 static uint8_t sd_type_block_addressing = 0;  // Track if SD uses block addressing
@@ -36,7 +38,7 @@ static void SD_Deselect(void) {
 
 static uint8_t SD_TxRx(uint8_t data) {
     uint8_t rx = 0;
-    HAL_StatusTypeDef test = HAL_SPI_TransmitReceive(&hspi2, &data, &rx, 1, HAL_MAX_DELAY);
+    HAL_StatusTypeDef test = HAL_SPI_TransmitReceive(&hspi2, &data, &rx, 1, SD_SPI_TRANSFER_TIMEOUT_MS);
     if(test != HAL_OK) {
         return 0xFF;
     }    
