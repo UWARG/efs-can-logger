@@ -19,19 +19,21 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "fatfs.h"
-#include "blackbox_logger.h"
-#include "stm32l4xx_hal.h"
-#include <stdint.h>
-#include <stdio.h>
-#include <string.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "blackbox_logger.h"
+#include "can_receiver.h"
+#include <stdint.h>
 
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+
+// FOR FUTURE: Could use g_fault_code to output viewable codes (LED blinks or something like that)
+static volatile FaultCode g_fault_code = FAULT_NONE;
+static volatile bool g_runtime_fault = false;
 
 /* USER CODE END PTD */
 
@@ -46,6 +48,8 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+CAN_HandleTypeDef hcan1;
+
 SPI_HandleTypeDef hspi2;
 
 UART_HandleTypeDef huart2;
@@ -59,7 +63,9 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_SPI2_Init(void);
+static void MX_CAN1_Init(void);
 /* USER CODE BEGIN PFP */
+static void Recoverable_ErrorHandler(FaultCode fault);
 // static void SD_MeasureStallTime(void);
 /* USER CODE END PFP */
 
@@ -100,6 +106,7 @@ int main(void)
   MX_USART2_UART_Init();
   MX_SPI2_Init();
   MX_FATFS_Init();
+  MX_CAN1_Init();
   /* USER CODE BEGIN 2 */
 
 // Viewable File Test
@@ -124,6 +131,10 @@ int main(void)
   if (!BlackboxLogger_Init("blackbox.bin")) {
     Error_Handler();
   }
+
+  if (!CanReceiver_Init()) {
+    Error_Handler();
+  }
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -140,10 +151,11 @@ int main(void)
       }
     }
 
-    if (BlackboxLogger_HasStorageError()) {
-      Error_Handler();
+    if (BlackboxLogger_HasStorageError() && !g_runtime_fault) {
+      Recoverable_ErrorHandler(FAULT_STORAGE);
     }
     /* USER CODE END WHILE */
+
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -196,6 +208,42 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief CAN1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_CAN1_Init(void)
+{
+
+  /* USER CODE BEGIN CAN1_Init 0 */
+
+  /* USER CODE END CAN1_Init 0 */
+
+  /* USER CODE BEGIN CAN1_Init 1 */
+
+  /* USER CODE END CAN1_Init 1 */
+  hcan1.Instance = CAN1;
+  hcan1.Init.Prescaler = 8;
+  hcan1.Init.Mode = CAN_MODE_NORMAL;
+  hcan1.Init.SyncJumpWidth = CAN_SJW_1TQ;
+  hcan1.Init.TimeSeg1 = CAN_BS1_7TQ;
+  hcan1.Init.TimeSeg2 = CAN_BS2_2TQ;
+  hcan1.Init.TimeTriggeredMode = DISABLE;
+  hcan1.Init.AutoBusOff = ENABLE;
+  hcan1.Init.AutoWakeUp = DISABLE;
+  hcan1.Init.AutoRetransmission = ENABLE;
+  hcan1.Init.ReceiveFifoLocked = DISABLE;
+  hcan1.Init.TransmitFifoPriority = DISABLE;
+  if (HAL_CAN_Init(&hcan1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN CAN1_Init 2 */
+
+  /* USER CODE END CAN1_Init 2 */
 }
 
 /**
@@ -320,6 +368,17 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
+/**
+  * @brief  Records a recoverable runtime fault without stopping the MCU.
+  * @param  fault Fault code to record.
+  * @retval None
+  */
+static void Recoverable_ErrorHandler(FaultCode fault)
+{
+  g_fault_code = fault;
+  g_runtime_fault = true;
+}
+
 /* USER CODE END 4 */
 
 /**
@@ -330,6 +389,9 @@ void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
+  // Temp value
+  // Later we can add more definitions to the enum to specify errors/faults
+  g_fault_code = FAULT_STARTUP;
   __disable_irq();
   while (1)
   {

@@ -36,7 +36,13 @@ extern "C" {
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
-
+typedef enum {
+  FAULT_NONE = 0,
+  FAULT_STARTUP,
+  FAULT_STORAGE,
+  FAULT_CAN,
+  FAULT_ASSERT
+} FaultCode;
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
