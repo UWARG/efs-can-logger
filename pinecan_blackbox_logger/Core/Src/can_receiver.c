@@ -61,6 +61,7 @@ bool CanReceiver_Init(void)
  * Called by the HAL after CAN1_RX0_IRQHandler() dispatches a FIFO0 event.
  * This function must remain short: no filesystem access, blocking calls, or
  * dynamic allocation belong in the interrupt context.
+ * WILL NEED TO BE REVIEWED ONCE FRAME FORMAT IS CONFIRMED
  */
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
