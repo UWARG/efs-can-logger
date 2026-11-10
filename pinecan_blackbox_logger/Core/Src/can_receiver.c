@@ -77,27 +77,27 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
         hcan,
         CAN_RX_FIFO0,
         &header,
-        record.data) != HAL_OK) {
+        record.data_bytes) != HAL_OK) {
     return;
   }
 
   record.timestamp_ms = HAL_GetTick();
 
   if (header.IDE == CAN_ID_EXT) {
-    record.id = header.ExtId;
-    record.flags |= CAN_RECORD_FLAG_EXTENDED;
+    record.arbitration_id = header.ExtId;
+    record.frame_flags |= CAN_RECORD_FLAG_EXTENDED;
   } else {
-    record.id = header.StdId;
+    record.arbitration_id = header.StdId;
   }
 
   if (header.RTR == CAN_RTR_REMOTE) {
-    record.flags |= CAN_RECORD_FLAG_REMOTE;
+    record.frame_flags |= CAN_RECORD_FLAG_REMOTE;
   }
 
-  payload_size = (header.DLC <= sizeof(record.data))
+  payload_size = (header.DLC <= sizeof(record.data_bytes))
                ? (uint8_t)header.DLC
-               : (uint8_t)sizeof(record.data);
-  record.dlc = payload_size;
+               : (uint8_t)sizeof(record.data_bytes);
+  record.data_length_code = payload_size;
 
   /* The logger copies the record into its active ISR-safe buffer. */
   BlackboxLogger_PushFromISR(&record, sizeof(record));

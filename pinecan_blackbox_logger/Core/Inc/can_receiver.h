@@ -6,11 +6,11 @@
 // TEMP for development
 typedef struct {
   uint32_t timestamp_ms;
-  uint32_t id;
-  uint8_t  flags;
-  uint8_t  dlc;
-  uint8_t  data[8];
-  uint8_t  reserved[2];
+  uint32_t arbitration_id;
+  uint8_t  frame_flags;
+  uint8_t  data_length_code;
+  uint8_t  data_bytes[8];
+  uint8_t  padding[2];
 } CanLogRecord;
 
 /*
