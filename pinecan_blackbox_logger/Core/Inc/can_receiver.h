@@ -3,7 +3,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-// TEMP for development
+/* Confirmed on-disk CAN record format: 20 bytes per frame. */
 typedef struct {
   uint32_t timestamp_ms;
   uint32_t arbitration_id;

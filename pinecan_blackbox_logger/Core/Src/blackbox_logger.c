@@ -86,7 +86,7 @@ void BlackboxLogger_Service(void) {
     uint32_t primask = __get_PRIMASK();
     __disable_irq();
 
-    if (!storage_error && ready_index >= 0 && !writer_busy) {
+    if (!storage_error && (ready_index >= 0) && !writer_busy) {
         claimed_index = ready_index;
         writer_busy = true;
     }
@@ -110,7 +110,7 @@ void BlackboxLogger_Service(void) {
         &bytes_written
     );
 
-    bool successful = result == FR_OK && bytes_written == buffer->used;
+    bool successful = (result == FR_OK) && (bytes_written == buffer->used);
 
     primask = __get_PRIMASK();
     __disable_irq();
