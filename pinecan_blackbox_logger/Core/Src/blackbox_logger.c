@@ -20,6 +20,15 @@ static volatile bool writer_busy;
 static volatile bool storage_error;
 static volatile uint32_t dropped_records;
 
+
+// For testing
+static volatile uint32_t last_write_ms;
+static volatile uint32_t max_write_ms;
+static volatile size_t last_used;
+static volatile uint32_t sync_time;
+static volatile uint32_t max_sync_time;
+
+
 static FATFS filesystem;
 static FIL log_file;
 
@@ -30,12 +39,23 @@ bool BlackboxLogger_Init(const char *filename) {
     storage_error = false;
     dropped_records = 0;
 
+    last_write_ms = 0;
+    max_write_ms = 0;
+    last_used = 0;
+
+    sync_time = 0;
+    max_sync_time = 0;
+
     buffers[0].used = 0;
     buffers[1].used = 0;
 
-    if (f_mount(&filesystem, "", 1) != FR_OK) {
-        return false;
+    FRESULT mount_stat = f_mount(&filesystem, "", 1);
+
+    if (mount_stat != FR_OK) {
+        f_unlink(filename);
+        f_mount(&filesystem, "", 1);
     }
+
 
     return f_open(&log_file, filename, FA_OPEN_APPEND | FA_WRITE) == FR_OK;
 }
@@ -102,6 +122,9 @@ void BlackboxLogger_Service(void) {
     // Blocking filesystem write
     LogBuffer *buffer = &buffers[claimed_index];
 
+    // For testing
+    uint32_t write_start = HAL_GetTick();
+
     UINT bytes_written = 0;
     FRESULT result = f_write(
         &log_file,
@@ -109,6 +132,13 @@ void BlackboxLogger_Service(void) {
         buffer->used,
         &bytes_written
     );
+
+    // For testing
+    uint32_t write_end = HAL_GetTick();
+    uint32_t write_time = write_end - write_start;
+    last_write_ms = write_time;
+    max_write_ms = (write_time > max_write_ms) ? write_time : max_write_ms;
+    last_used = buffer->used;
 
     bool successful = (result == FR_OK) && (bytes_written == buffer->used);
 
@@ -158,10 +188,16 @@ bool BlackboxLogger_Flush(void) {
         return false;
     }
 
+    uint32_t sync_start = HAL_GetTick();
+
     if (f_sync(&log_file) != FR_OK) {
         storage_error = true;
         return false;
     }
+
+    uint32_t sync_end = HAL_GetTick();
+    sync_time = sync_end - sync_start;
+    max_sync_time = (sync_time > max_sync_time) ? sync_time : max_sync_time;
 
     return true;
 }
