@@ -35,23 +35,13 @@
 static volatile FaultCode g_fault_code = FAULT_NONE;
 static volatile bool g_runtime_fault = false;
 
-typedef enum {
-  CAN_TEST_NOT_RUN = 0,
-  CAN_TEST_WAITING_FOR_RX,
-  CAN_TEST_PASSED,
-  CAN_TEST_INIT_FAILED,
-  CAN_TEST_TX_FAILED,
-  CAN_TEST_RX_TIMEOUT,
-  CAN_TEST_SD_FAILED
-} CanTestStatus;
-
-static volatile CanTestStatus g_can_test_status = CAN_TEST_NOT_RUN;
-
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define CAN_TEST_TIMEOUT_MS 1000U
+/* How often a partially filled buffer is written out and the file synced,
+ * which bounds how much data a power cut can lose. */
+#define LOG_FLUSH_PERIOD_MS 1000U
 
 /* USER CODE END PD */
 
@@ -79,7 +69,6 @@ static void MX_SPI2_Init(void);
 static void MX_CAN1_Init(void);
 /* USER CODE BEGIN PFP */
 static void Recoverable_ErrorHandler(FaultCode fault);
-void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -123,67 +112,33 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   if (!BlackboxLogger_Init("blackbox.bin")) {
-    g_can_test_status = CAN_TEST_INIT_FAILED;
     Error_Handler();
   }
 
+  /* Starts CAN1 and enables the RX FIFO0 interrupt. From here on, every
+   * received frame is pushed into the logger by the receive callback. */
   if (!CanReceiver_Init()) {
-    g_can_test_status = CAN_TEST_INIT_FAILED;
-    Error_Handler();
-  }
-
-  /* Handle the simulated FIFO frame explicitly in this one-shot test. */
-  if (HAL_CAN_DeactivateNotification(&hcan1,
-        CAN_IT_RX_FIFO0_MSG_PENDING | CAN_IT_RX_FIFO0_FULL) != HAL_OK) {
-    g_can_test_status = CAN_TEST_INIT_FAILED;
     Error_Handler();
   }
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  uint8_t test_data[8] = {0x43, 0x41, 0x4E, 0x2D,
-                          0x54, 0x45, 0x53, 0x54}; /* CAN-TEST */
-  CAN_TxHeaderTypeDef test_header = {0};
-  uint32_t tx_mailbox;
-  uint32_t started;
-
-  test_header.StdId = 0x321U;
-  test_header.IDE = CAN_ID_STD;
-  test_header.RTR = CAN_RTR_DATA;
-  test_header.DLC = sizeof(test_data);
-
-  g_can_test_status = CAN_TEST_WAITING_FOR_RX;
-  if (HAL_CAN_AddTxMessage(&hcan1, &test_header, test_data,
-                           &tx_mailbox) != HAL_OK) {
-    g_can_test_status = CAN_TEST_TX_FAILED;
-  } else {
-    started = HAL_GetTick();
-    while (HAL_CAN_GetRxFifoFillLevel(&hcan1, CAN_RX_FIFO0) == 0U &&
-           (uint32_t)(HAL_GetTick() - started) < CAN_TEST_TIMEOUT_MS) {
-    }
-
-    if (HAL_CAN_GetRxFifoFillLevel(&hcan1, CAN_RX_FIFO0) == 0U) {
-      g_can_test_status = CAN_TEST_RX_TIMEOUT;
-    } else {
-      /* The callback reads FIFO0 and pushes that received frame into a buffer. */
-      HAL_CAN_RxFifo0MsgPendingCallback(&hcan1);
-
-      /* Service writes ready buffers; Flush writes this partial test buffer
-       * and synchronizes blackbox.bin to the SD card. */
-      BlackboxLogger_Service();
-      if (!BlackboxLogger_Flush() ||
-          BlackboxLogger_HasStorageError() ||
-          BlackboxLogger_GetDroppedRecordCount() != 0U) {
-        g_can_test_status = CAN_TEST_SD_FAILED;
-      } else {
-        g_can_test_status = CAN_TEST_PASSED;
-      }
-    }
-  }
+  uint32_t last_flush_ms = HAL_GetTick();
 
   while (1)
   {
+    /* Write a full buffer to the SD card, if one is waiting. */
+    BlackboxLogger_Service();
+
+    /* Periodically write the partial buffer and sync the file. A false
+     * return is not necessarily a fault (a buffer may have filled during the
+     * flush), so faults are detected through HasStorageError() below. */
+    if ((uint32_t)(HAL_GetTick() - last_flush_ms) >= LOG_FLUSH_PERIOD_MS) {
+      (void)BlackboxLogger_Flush();
+      last_flush_ms = HAL_GetTick();
+    }
+
     if (BlackboxLogger_HasStorageError() && !g_runtime_fault) {
       Recoverable_ErrorHandler(FAULT_STORAGE);
     }
@@ -260,7 +215,7 @@ static void MX_CAN1_Init(void)
   /* USER CODE END CAN1_Init 1 */
   hcan1.Instance = CAN1;
   hcan1.Init.Prescaler = 8;
-  hcan1.Init.Mode = CAN_MODE_LOOPBACK;
+  hcan1.Init.Mode = CAN_MODE_NORMAL;
   hcan1.Init.SyncJumpWidth = CAN_SJW_1TQ;
   hcan1.Init.TimeSeg1 = CAN_BS1_7TQ;
   hcan1.Init.TimeSeg2 = CAN_BS2_2TQ;
@@ -277,6 +232,7 @@ static void MX_CAN1_Init(void)
   /* USER CODE BEGIN CAN1_Init 2 */
 
   /* USER CODE END CAN1_Init 2 */
+
 }
 
 /**
