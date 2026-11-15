@@ -1,0 +1,3 @@
+# CubeMX writes CRLF on Windows and LF on macOS. Store the .ioc normalized so
+# regenerating on a different OS does not rewrite every line.
+*.ioc text eol=crlf
