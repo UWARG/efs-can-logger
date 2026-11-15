@@ -131,9 +131,7 @@ int main(void)
     /* Write a full buffer to the SD card, if one is waiting. */
     BlackboxLogger_Service();
 
-    /* Periodically write the partial buffer and sync the file. A false
-     * return is not necessarily a fault (a buffer may have filled during the
-     * flush), so faults are detected through HasStorageError() below. */
+    /* Flush buffer every LOG_FLUSH_PERIOD_MS */
     if ((uint32_t)(HAL_GetTick() - last_flush_ms) >= LOG_FLUSH_PERIOD_MS) {
       (void)BlackboxLogger_Flush();
       last_flush_ms = HAL_GetTick();
