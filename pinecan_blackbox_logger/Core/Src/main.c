@@ -42,6 +42,7 @@ typedef enum {
   CAN_TEST_INIT_FAILED,
   CAN_TEST_TX_FAILED,
   CAN_TEST_RX_TIMEOUT,
+  CAN_TEST_RX_OVERRUN,
   CAN_TEST_SD_FAILED
 } CanTestStatus;
 
@@ -51,7 +52,9 @@ static volatile CanTestStatus g_can_test_status = CAN_TEST_NOT_RUN;
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define CAN_TEST_TIMEOUT_MS 1000U
+#define CAN_TEST_FRAME_COUNT  1000U
+#define CAN_TEST_PERIOD_MS    10U
+#define CAN_TEST_TOTAL_TIMEOUT_MS (CAN_TEST_FRAME_COUNT * CAN_TEST_PERIOD_MS + 2000U)
 
 /* USER CODE END PD */
 
@@ -68,7 +71,8 @@ SPI_HandleTypeDef hspi2;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-
+static volatile uint32_t g_test_tx_count = 0;
+static volatile bool g_test_tx_failed = false;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -84,7 +88,88 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+static void CanTest_StartTimer(void) {
+    __HAL_RCC_TIM7_CLK_ENABLE();
 
+    TIM7->CR1 = 0;
+    TIM7->DIER = 0;
+
+    // Current configuration: TIM7 clock = 80 MHz.
+    // Divide to a 10 kHz counter, then interrupt every 10 ms.
+    TIM7->PSC = 8000U - 1U;
+    TIM7->ARR = CAN_TEST_PERIOD_MS * 10U - 1U;
+    TIM7->CNT = 0;
+
+    // Load the prescaler, then clear the resulting update flag.
+    TIM7->EGR = TIM_EGR_UG;
+    TIM7->SR = 0;
+
+    // CAN RX currently has priority 0, so it can interrupt this handler.
+    HAL_NVIC_SetPriority(TIM7_IRQn, 1, 0);
+    HAL_NVIC_ClearPendingIRQ(TIM7_IRQn);
+    HAL_NVIC_EnableIRQ(TIM7_IRQn);
+
+    TIM7->DIER = TIM_DIER_UIE;
+    TIM7->CR1 = TIM_CR1_CEN;
+}
+
+static void CanTest_StopTimer(void) {
+    TIM7->DIER = 0;
+    TIM7->CR1 = 0;
+    HAL_NVIC_DisableIRQ(TIM7_IRQn);
+    HAL_NVIC_ClearPendingIRQ(TIM7_IRQn);
+}
+
+void TIM7_IRQHandler(void) {
+    if ((TIM7->SR & TIM_SR_UIF) == 0U) {
+        return;
+    }
+
+    TIM7->SR = 0;
+
+    if (g_test_tx_failed ||
+        g_test_tx_count >= CAN_TEST_FRAME_COUNT) {
+        TIM7->DIER = 0;
+        TIM7->CR1 = 0;
+        return;
+    }
+
+    // Treat an unavailable mailbox as a test failure:
+    // do not silently slow down the requested transmission rate.
+    if (HAL_CAN_GetTxMailboxesFreeLevel(&hcan1) == 0U) {
+        g_test_tx_failed = true;
+        TIM7->DIER = 0;
+        TIM7->CR1 = 0;
+        return;
+    }
+
+    uint32_t sequence = g_test_tx_count;
+    uint8_t data[8] = {
+        (uint8_t)sequence,
+        (uint8_t)(sequence >> 8),
+        (uint8_t)(sequence >> 16),
+        (uint8_t)(sequence >> 24),
+        0, 0, 0, 0
+    };
+
+    CAN_TxHeaderTypeDef header = {0};
+    uint32_t mailbox;
+
+    header.StdId = 0x321U;
+    header.IDE = CAN_ID_STD;
+    header.RTR = CAN_RTR_DATA;
+    header.DLC = sizeof(data);
+
+    if (HAL_CAN_AddTxMessage(
+            &hcan1, &header, data, &mailbox) != HAL_OK) {
+        g_test_tx_failed = true;
+        TIM7->DIER = 0;
+        TIM7->CR1 = 0;
+        return;
+    }
+
+    g_test_tx_count = sequence + 1U;
+}
 /* USER CODE END 0 */
 
 /**
@@ -132,54 +217,60 @@ int main(void)
     Error_Handler();
   }
 
-  /* Handle the simulated FIFO frame explicitly in this one-shot test. */
-  if (HAL_CAN_DeactivateNotification(&hcan1,
-        CAN_IT_RX_FIFO0_MSG_PENDING | CAN_IT_RX_FIFO0_FULL) != HAL_OK) {
-    g_can_test_status = CAN_TEST_INIT_FAILED;
-    Error_Handler();
-  }
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  uint8_t test_data[8] = {0x43, 0x41, 0x4E, 0x2D,
-                          0x54, 0x45, 0x53, 0x54}; /* CAN-TEST */
-  CAN_TxHeaderTypeDef test_header = {0};
-  uint32_t tx_mailbox;
-  uint32_t started;
-
-  test_header.StdId = 0x321U;
-  test_header.IDE = CAN_ID_STD;
-  test_header.RTR = CAN_RTR_DATA;
-  test_header.DLC = sizeof(test_data);
-
+  g_test_tx_count = 0;
+  g_test_tx_failed = false;
   g_can_test_status = CAN_TEST_WAITING_FOR_RX;
-  if (HAL_CAN_AddTxMessage(&hcan1, &test_header, test_data,
-                           &tx_mailbox) != HAL_OK) {
-    g_can_test_status = CAN_TEST_TX_FAILED;
-  } else {
-    started = HAL_GetTick();
-    while (HAL_CAN_GetRxFifoFillLevel(&hcan1, CAN_RX_FIFO0) == 0U &&
-           (uint32_t)(HAL_GetTick() - started) < CAN_TEST_TIMEOUT_MS) {
-    }
 
-    if (HAL_CAN_GetRxFifoFillLevel(&hcan1, CAN_RX_FIFO0) == 0U) {
-      g_can_test_status = CAN_TEST_RX_TIMEOUT;
-    } else {
-      /* The callback reads FIFO0 and pushes that received frame into a buffer. */
-      HAL_CAN_RxFifo0MsgPendingCallback(&hcan1);
+  uint32_t test_started = HAL_GetTick();
+  CanTest_StartTimer();
 
-      /* Service writes ready buffers; Flush writes this partial test buffer
-       * and synchronizes blackbox.bin to the SD card. */
-      BlackboxLogger_Service();
-      if (!BlackboxLogger_Flush() ||
-          BlackboxLogger_HasStorageError() ||
-          BlackboxLogger_GetDroppedRecordCount() != 0U) {
-        g_can_test_status = CAN_TEST_SD_FAILED;
-      } else {
-        g_can_test_status = CAN_TEST_PASSED;
+  while (g_test_tx_count < CAN_TEST_FRAME_COUNT ||
+        CanReceiver_GetReceived() < CAN_TEST_FRAME_COUNT) {
+
+      if (g_test_tx_failed) {
+          g_can_test_status = CAN_TEST_TX_FAILED;
+          break;
       }
-    }
+
+      if (BlackboxLogger_HasStorageError() ||
+          BlackboxLogger_GetDroppedRecordCount() != 0U) {
+          g_can_test_status = CAN_TEST_SD_FAILED;
+          break;
+      }
+
+      if (CanReceiver_GetOverrun() != 0U) {
+          g_can_test_status = CAN_TEST_RX_OVERRUN;
+          break;
+      }
+
+      if ((uint32_t)(HAL_GetTick() - test_started) >=
+          CAN_TEST_TOTAL_TIMEOUT_MS) {
+          g_can_test_status = CAN_TEST_RX_TIMEOUT;
+          break;
+      }
+
+      // Timer and CAN interrupts continue during this blocking write.
+      BlackboxLogger_Service();
+  }
+
+  CanTest_StopTimer();
+
+  if (g_can_test_status == CAN_TEST_WAITING_FOR_RX) {
+      if (g_test_tx_failed) {
+        g_can_test_status = CAN_TEST_TX_FAILED;
+      } else if (CanReceiver_GetOverrun() != 0U) {
+          g_can_test_status = CAN_TEST_RX_OVERRUN;
+      } else if (!BlackboxLogger_Flush() ||
+                  BlackboxLogger_HasStorageError() ||
+                  BlackboxLogger_GetDroppedRecordCount() != 0U) {
+          g_can_test_status = CAN_TEST_SD_FAILED;
+      } else {
+          g_can_test_status = CAN_TEST_PASSED;
+      }
   }
 
   while (1)

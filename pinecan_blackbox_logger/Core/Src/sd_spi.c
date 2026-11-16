@@ -27,6 +27,7 @@ extern SPI_HandleTypeDef hspi2;
 static uint8_t sd_initialized = 0; // Track init status
 static uint8_t sd_type_v2 = 0; // Track SD V2 status
 static uint8_t sd_type_block_addressing = 0;  // Track if SD uses block addressing
+static uint8_t sd_transfer_error = 0; // Track if there is a write error
 
 static void SD_Select(void) {
     HAL_GPIO_WritePin(SPI2_CS_PIN_GPIO_Port, SPI2_CS_PIN_Pin, GPIO_PIN_RESET);
@@ -37,11 +38,16 @@ static void SD_Deselect(void) {
 }
 
 static uint8_t SD_TxRx(uint8_t data) {
-    uint8_t rx = 0;
-    HAL_StatusTypeDef test = HAL_SPI_TransmitReceive(&hspi2, &data, &rx, 1, SD_SPI_TRANSFER_TIMEOUT_MS);
-    if(test != HAL_OK) {
+    uint8_t rx = 0xFF;
+    if (sd_transfer_error) {
         return 0xFF;
-    }    
+    }
+    if (HAL_SPI_TransmitReceive(
+            &hspi2, &data, &rx, 1,
+            SD_SPI_TRANSFER_TIMEOUT_MS) != HAL_OK) {
+        sd_transfer_error = 1;
+        return 0xFF;
+    }
     return rx;
 }
 
@@ -54,9 +60,13 @@ static void SD_SendDummyClocks(uint8_t bytes) {
 static uint8_t SD_WaitReady(uint32_t timeout_ms) {
     uint32_t start = HAL_GetTick();
 
-    while((HAL_GetTick() - start) < timeout_ms) {
-        if(SD_TxRx(SD_DUMMY_BYTE) == 0xFF) {
-            return 1; // Ready
+    while ((uint32_t)(HAL_GetTick() - start) < timeout_ms) {
+        uint8_t response = SD_TxRx(SD_DUMMY_BYTE);
+        if (sd_transfer_error) {
+            return 0;
+        }
+        if (response == 0xFF) {
+            return 1;
         }
     }
 
@@ -137,7 +147,7 @@ static uint8_t SD_ReadCSD(uint8_t *csd) {
     SD_Deselect();
     SD_TxRx(SD_DUMMY_BYTE);
 
-    return SD_SPI_OK;
+    return sd_transfer_error ? SD_SPI_ERROR : SD_SPI_OK;
 }
 
 uint8_t SD_SPI_Init() {
@@ -147,6 +157,7 @@ uint8_t SD_SPI_Init() {
     sd_initialized = 0;
     sd_type_v2 = 0;
     sd_type_block_addressing = 0;
+    sd_transfer_error = 0;
 
     SD_Deselect();
     SD_SendDummyClocks(10); // Pull CS high
@@ -246,6 +257,10 @@ uint8_t SD_SPI_Init() {
         }
     }
 
+    if (sd_transfer_error) {
+        return SD_SPI_ERROR;
+    }
+
     sd_initialized = 1;
     return SD_SPI_OK;
 }
@@ -298,7 +313,7 @@ uint8_t SD_SPI_ReadBlocks(uint8_t *buff, uint32_t sector, uint32_t count) {
         SD_Deselect();
         SD_TxRx(SD_DUMMY_BYTE);
     }
-    return SD_SPI_OK;
+    return sd_transfer_error ? SD_SPI_ERROR : SD_SPI_OK;
 }
 
 uint8_t SD_SPI_WriteBlocks(const uint8_t *buff, uint32_t sector, uint32_t count) {
@@ -349,7 +364,7 @@ uint8_t SD_SPI_WriteBlocks(const uint8_t *buff, uint32_t sector, uint32_t count)
         SD_Deselect();
         SD_TxRx(SD_DUMMY_BYTE);
     }
-    return SD_SPI_OK;
+    return sd_transfer_error ? SD_SPI_ERROR : SD_SPI_OK;
 }
 
 uint8_t SD_SPI_Sync() {
@@ -366,7 +381,7 @@ uint8_t SD_SPI_Sync() {
     SD_Deselect();
     SD_TxRx(SD_DUMMY_BYTE);
 
-    if(ready){
+    if(ready && !sd_transfer_error){
         return SD_SPI_OK;
     }
 

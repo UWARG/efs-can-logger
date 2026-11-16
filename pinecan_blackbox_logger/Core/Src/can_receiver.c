@@ -8,8 +8,10 @@
 
 extern CAN_HandleTypeDef hcan1;
 
-enum
-{
+static volatile uint32_t received = 0;
+static volatile uint32_t fifo0_overrun = 0;
+
+enum {
   CAN_RECORD_FLAG_EXTENDED = 1U << 0,
   CAN_RECORD_FLAG_REMOTE = 1U << 1
 };
@@ -19,8 +21,7 @@ _Static_assert(sizeof(CanLogRecord) == 20U,
 
 static bool receiver_initialized = false;
 
-bool CanReceiver_Init(void)
-{
+bool CanReceiver_Init(void) {
   CAN_FilterTypeDef filter = {0};
 
   if (receiver_initialized) {
@@ -49,7 +50,7 @@ bool CanReceiver_Init(void)
 
   if (HAL_CAN_ActivateNotification(
         &hcan1,
-        CAN_IT_RX_FIFO0_MSG_PENDING | CAN_IT_RX_FIFO0_FULL) != HAL_OK) {
+        CAN_IT_RX_FIFO0_MSG_PENDING | CAN_IT_RX_FIFO0_FULL | CAN_IT_RX_FIFO0_OVERRUN) != HAL_OK) {
     return false;
   }
 
@@ -62,8 +63,7 @@ bool CanReceiver_Init(void)
  * This function must remain short: no filesystem access, blocking calls, or
  * dynamic allocation belong in the interrupt context.
  */
-void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
-{
+void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
   CAN_RxHeaderTypeDef header;
   CanLogRecord record = {0};
   uint8_t payload_size;
@@ -100,4 +100,29 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 
   /* The logger copies the record into its active ISR-safe buffer. */
   BlackboxLogger_PushFromISR(&record, sizeof(record));
+  received++;
+}
+
+uint32_t CanReceiver_GetReceived(void) {
+  return received;
+}
+
+uint32_t CanReceiver_GetOverrun(void) {
+  return fifo0_overrun;
+}
+
+void HAL_CAN_ErrorCallback(CAN_HandleTypeDef *hcan) {
+    if (hcan != &hcan1) {
+        return;
+    }
+
+    if ((HAL_CAN_GetError(hcan) &
+         HAL_CAN_ERROR_RX_FOV0) != 0U) {
+        fifo0_overrun++;
+
+        // HAL already cleared the hardware overrun flag.
+        // Clear this software error bit so an unrelated later
+        // error callback does not count the same overrun again.
+        hcan->ErrorCode &= ~HAL_CAN_ERROR_RX_FOV0;
+    }
 }

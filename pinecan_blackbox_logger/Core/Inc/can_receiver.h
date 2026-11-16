@@ -19,3 +19,5 @@ typedef struct {
  * the RX FIFO0 notification used by the receiver callback.
  */
 bool CanReceiver_Init(void);
+uint32_t CanReceiver_GetReceived(void);
+uint32_t CanReceiver_GetOverrun(void); 

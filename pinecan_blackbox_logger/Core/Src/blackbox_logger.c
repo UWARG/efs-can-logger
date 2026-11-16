@@ -5,7 +5,7 @@
 
 #include <string.h>
 
-#define LOG_BUFFER_SIZE 6144U
+#define LOG_BUFFER_SIZE 4096U
 
 typedef struct {
     uint8_t data[LOG_BUFFER_SIZE];
