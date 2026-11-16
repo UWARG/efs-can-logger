@@ -127,11 +127,10 @@ void TIM7_IRQHandler(void) {
 
     TIM7->SR = 0;
 
-    if (g_test_tx_failed ||
-        g_test_tx_count >= CAN_TEST_FRAME_COUNT) {
-        TIM7->DIER = 0;
-        TIM7->CR1 = 0;
-        return;
+    if (g_test_tx_failed || g_test_tx_count >= CAN_TEST_FRAME_COUNT) {
+      TIM7->DIER = 0;
+      TIM7->CR1 = 0;
+      return;
     }
 
     // Treat an unavailable mailbox as a test failure:
@@ -160,8 +159,7 @@ void TIM7_IRQHandler(void) {
     header.RTR = CAN_RTR_DATA;
     header.DLC = sizeof(data);
 
-    if (HAL_CAN_AddTxMessage(
-            &hcan1, &header, data, &mailbox) != HAL_OK) {
+    if (HAL_CAN_AddTxMessage(&hcan1, &header, data, &mailbox) != HAL_OK) {
         g_test_tx_failed = true;
         TIM7->DIER = 0;
         TIM7->CR1 = 0;
@@ -228,49 +226,45 @@ int main(void)
   uint32_t test_started = HAL_GetTick();
   CanTest_StartTimer();
 
-  while (g_test_tx_count < CAN_TEST_FRAME_COUNT ||
-        CanReceiver_GetReceived() < CAN_TEST_FRAME_COUNT) {
+  while (g_test_tx_count < CAN_TEST_FRAME_COUNT || CanReceiver_GetReceived() < CAN_TEST_FRAME_COUNT) {
+    if (g_test_tx_failed) {
+      g_can_test_status = CAN_TEST_TX_FAILED;
+      break;
+    }
 
-      if (g_test_tx_failed) {
-          g_can_test_status = CAN_TEST_TX_FAILED;
-          break;
-      }
+    if (BlackboxLogger_HasStorageError() || BlackboxLogger_GetDroppedRecordCount() != 0U) {
+      g_can_test_status = CAN_TEST_SD_FAILED;
+      break;
+    }
 
-      if (BlackboxLogger_HasStorageError() ||
-          BlackboxLogger_GetDroppedRecordCount() != 0U) {
-          g_can_test_status = CAN_TEST_SD_FAILED;
-          break;
-      }
+    if (CanReceiver_GetOverrun() != 0U) {
+      g_can_test_status = CAN_TEST_RX_OVERRUN;
+      break;
+    }
 
-      if (CanReceiver_GetOverrun() != 0U) {
-          g_can_test_status = CAN_TEST_RX_OVERRUN;
-          break;
-      }
+    if ((uint32_t)(HAL_GetTick() - test_started) >= CAN_TEST_TOTAL_TIMEOUT_MS) {
+      g_can_test_status = CAN_TEST_RX_TIMEOUT;
+      break;
+    }
 
-      if ((uint32_t)(HAL_GetTick() - test_started) >=
-          CAN_TEST_TOTAL_TIMEOUT_MS) {
-          g_can_test_status = CAN_TEST_RX_TIMEOUT;
-          break;
-      }
-
-      // Timer and CAN interrupts continue during this blocking write.
-      BlackboxLogger_Service();
+    // Timer and CAN interrupts continue during this blocking write.
+    BlackboxLogger_Service();
   }
 
   CanTest_StopTimer();
 
   if (g_can_test_status == CAN_TEST_WAITING_FOR_RX) {
-      if (g_test_tx_failed) {
-        g_can_test_status = CAN_TEST_TX_FAILED;
-      } else if (CanReceiver_GetOverrun() != 0U) {
-          g_can_test_status = CAN_TEST_RX_OVERRUN;
-      } else if (!BlackboxLogger_Flush() ||
-                  BlackboxLogger_HasStorageError() ||
-                  BlackboxLogger_GetDroppedRecordCount() != 0U) {
-          g_can_test_status = CAN_TEST_SD_FAILED;
-      } else {
-          g_can_test_status = CAN_TEST_PASSED;
-      }
+    if (g_test_tx_failed) {
+      g_can_test_status = CAN_TEST_TX_FAILED;
+    } else if (CanReceiver_GetOverrun() != 0U) {
+      g_can_test_status = CAN_TEST_RX_OVERRUN;
+    } else if (!BlackboxLogger_Flush() ||
+                BlackboxLogger_HasStorageError() ||
+                BlackboxLogger_GetDroppedRecordCount() != 0U) {
+      g_can_test_status = CAN_TEST_SD_FAILED;
+    } else {
+      g_can_test_status = CAN_TEST_PASSED;
+    }
   }
 
   while (1)
@@ -321,8 +315,7 @@ void SystemClock_Config(void)
 
   /** Initializes the CPU, AHB and APB buses clocks
   */
-  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
-                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK|RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
