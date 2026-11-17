@@ -52,8 +52,8 @@ static volatile CanTestStatus g_can_test_status = CAN_TEST_NOT_RUN;
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define CAN_TEST_FRAME_COUNT  1000U
-#define CAN_TEST_PERIOD_MS    10U
+#define CAN_TEST_FRAME_COUNT 1000U
+#define CAN_TEST_PERIOD_MS 10U
 #define CAN_TEST_TOTAL_TIMEOUT_MS (CAN_TEST_FRAME_COUNT * CAN_TEST_PERIOD_MS + 2000U)
 
 /* USER CODE END PD */
