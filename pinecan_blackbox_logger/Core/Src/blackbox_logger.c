@@ -50,7 +50,7 @@ bool BlackboxLogger_Init(const char *filename) {
     buffers[0].used = 0;
     buffers[1].used = 0;
 
-    HAL_Delay(1000); // Wait before mount
+    HAL_Delay(1000); // Wait before mount -> Review retry time
 
     FRESULT mount_stat = f_mount(&filesystem, "", 1);
 
