@@ -2,6 +2,7 @@
 #include "blackbox_logger.h"
 #include "fatfs.h"
 #include "main.h"
+#include "stm32l4xx_hal.h"
 
 #include <string.h>
 
@@ -48,6 +49,8 @@ bool BlackboxLogger_Init(const char *filename) {
 
     buffers[0].used = 0;
     buffers[1].used = 0;
+
+    HAL_Delay(1000); // Wait before mount
 
     FRESULT mount_stat = f_mount(&filesystem, "", 1);
 
