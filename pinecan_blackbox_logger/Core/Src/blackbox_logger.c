@@ -10,7 +10,7 @@
 
 // For testing mount time
 #define SD_MOUNT_RETRY_DELAY_MS 50U
-#define SD_MOUNT_TIMEOUT_MS     2000U
+#define SD_MOUNT_TIMEOUT_MS     250U
 
 typedef struct {
     uint8_t data[LOG_BUFFER_SIZE];
