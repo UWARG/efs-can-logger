@@ -8,6 +8,10 @@
 
 #define LOG_BUFFER_SIZE 4096U
 
+// For testing mount time
+#define SD_MOUNT_RETRY_DELAY_MS 50U
+#define SD_MOUNT_TIMEOUT_MS     2000U
+
 typedef struct {
     uint8_t data[LOG_BUFFER_SIZE];
     volatile size_t used;
@@ -22,16 +26,44 @@ static volatile bool storage_error;
 static volatile uint32_t dropped_records;
 
 
-// For testing
+// For testing write time
 static volatile uint32_t last_write_ms;
 static volatile uint32_t max_write_ms;
 static volatile size_t last_used;
 static volatile uint32_t sync_time;
 static volatile uint32_t max_sync_time;
 
+// For testing mount time
+static volatile uint32_t mount_time;      // ms from first attempt until mount succeeded (or gave up)
+static volatile uint32_t mount_attempts;  // number of f_mount() calls made
+
 
 static FATFS filesystem;
 static FIL log_file;
+
+static FRESULT mount_with_retry(void) {
+    uint32_t mount_start = HAL_GetTick();
+    FRESULT result;
+    bool retry;
+
+    mount_attempts = 0;
+
+    do {
+        result = f_mount(&filesystem, "", 1);
+        mount_attempts++;
+
+        // Retry if the mount failed and not timeout
+        retry = (result != FR_OK) &&
+                ((HAL_GetTick() - mount_start) + SD_MOUNT_RETRY_DELAY_MS <= SD_MOUNT_TIMEOUT_MS);
+
+        if (retry) {
+            HAL_Delay(SD_MOUNT_RETRY_DELAY_MS);
+        }
+    } while (retry);
+
+    mount_time = HAL_GetTick() - mount_start;
+    return result;
+}
 
 bool BlackboxLogger_Init(const char *filename) {
     active_index = 0;
@@ -50,15 +82,18 @@ bool BlackboxLogger_Init(const char *filename) {
     buffers[0].used = 0;
     buffers[1].used = 0;
 
-    HAL_Delay(1000); // Wait before mount -> Review retry time
+    // FRESULT mount_stat = f_mount(&filesystem, "", 1);
 
-    FRESULT mount_stat = f_mount(&filesystem, "", 1);
+    // if (mount_stat != FR_OK) {
+    //     f_unlink(filename);
+    //     mount_stat = f_mount(&filesystem, "", 1);
+    // }
 
-    if (mount_stat != FR_OK) {
-        f_unlink(filename);
-        f_mount(&filesystem, "", 1);
+    mount_time = 0;
+
+    if (mount_with_retry() != FR_OK) {
+        return false;
     }
-
 
     return f_open(&log_file, filename, FA_OPEN_APPEND | FA_WRITE) == FR_OK;
 }

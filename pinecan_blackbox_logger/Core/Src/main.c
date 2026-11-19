@@ -43,7 +43,8 @@ typedef enum {
   CAN_TEST_TX_FAILED,
   CAN_TEST_RX_TIMEOUT,
   CAN_TEST_RX_OVERRUN,
-  CAN_TEST_SD_FAILED
+  CAN_TEST_SD_FAILED,
+  BLACKBOX_INIT_FAILED,
 } CanTestStatus;
 
 static volatile CanTestStatus g_can_test_status = CAN_TEST_NOT_RUN;
@@ -206,7 +207,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   if (!BlackboxLogger_Init("blackbox.bin")) {
-    g_can_test_status = CAN_TEST_INIT_FAILED;
+    g_can_test_status = BLACKBOX_INIT_FAILED;
     Error_Handler();
   }
 
