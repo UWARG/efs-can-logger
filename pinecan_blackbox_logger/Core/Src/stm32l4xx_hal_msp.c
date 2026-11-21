@@ -188,7 +188,9 @@ void HAL_SPI_MspInit(SPI_HandleTypeDef* hspi)
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
     /* USER CODE BEGIN SPI2_MspInit 1 */
-
+    GPIO_InitStruct.Pin = GPIO_PIN_14 | GPIO_PIN_15;
+    GPIO_InitStruct.Pull = GPIO_PULLUP;
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
     /* USER CODE END SPI2_MspInit 1 */
 
   }
